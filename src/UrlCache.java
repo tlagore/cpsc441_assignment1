@@ -1,10 +1,10 @@
 import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -16,8 +16,6 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Locale;
-import java.util.Scanner;
 
 
 /**
@@ -88,7 +86,9 @@ public class UrlCache {
      * @throws UrlCacheException if encounters any errors/exceptions
      */
 	public void getObject(String url) throws UrlCacheException {
+		byte[] input = new byte[10*1024];
 		BufferedReader inputStream;
+		InputStream byteInputStream;
 		PrintWriter outputStream;
 		String response, 
 			headerInfo = "", 
@@ -141,17 +141,20 @@ public class UrlCache {
 			}
 			
 			header = new HttpHeader(headerInfo);
+			byteInputStream = socket.getInputStream();
 			
 			//not at end of get request and GET request was good
-			if(response != null && header.get_Status() == 200)
+			if(byteInputStream.available() > 0 && header.get_Status() == 200)
 			{
-				response = inputStream.readLine();
-				while(response != null)
+				while(byteInputStream.available() > 0)
 				{
-					data += response;
-					response = inputStream.readLine();
+					byteInputStream.read(input);
+					
+//					data += response;
+//					response = inputStream.readLine();
 				}
-				
+				//TODO move createDirectoryAndFile into above if statement before while loop
+				//TODO write data after each read from byteInputStream
 				createDirectoryAndFile(standardizedUrl, data);
 				_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
 			}else if (header.get_Status() == 304)
