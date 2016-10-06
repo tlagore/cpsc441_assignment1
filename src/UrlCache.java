@@ -38,6 +38,7 @@ public class UrlCache {
 	 *
      * @throws UrlCacheException if encounters any errors/exceptions
      */
+	@SuppressWarnings("unchecked")
 	public UrlCache() throws UrlCacheException {
 		String catalogDir = CACHE_DIR + "catalog";
 		Path path = Paths.get(catalogDir);
@@ -150,6 +151,9 @@ public class UrlCache {
 				
 				createDirectoryAndFile(standardizedUrl, data);
 				_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
+			}else if (header.get_Status() == 304)
+			{
+				System.out.println("Same or newer file already exists in cache.");
 			}
 			
 			inputStream.close();
