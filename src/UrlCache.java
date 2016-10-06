@@ -122,6 +122,9 @@ public class UrlCache {
 			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
 			outputStream = new PrintWriter(socket.getOutputStream());
 			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+		
+			//switch reading to this method
+			//socket.getInputStream().read(new byte[1500]);
 			
 			outputStream.print(command);
 			outputStream.print("Host: " + host + "\r\n");
