@@ -12,6 +12,8 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Scanner;
 
@@ -26,6 +28,7 @@ import java.util.Scanner;
 public class UrlCache {
 	private HashMap<String, Long> _Catalog;
 	private final int DEFAULT_HTTP_PORT = 80;
+	private final String CACHE_DIR = System.getProperty("user.dir") + "\\cache\\";
 		
     /**
      * Default constructor to initialize data structures used for caching/etc
@@ -34,7 +37,7 @@ public class UrlCache {
      * @throws UrlCacheException if encounters any errors/exceptions
      */
 	public UrlCache() throws UrlCacheException {
-		String catalogDir = System.getProperty("user.dir") + "\\cache\\catalog";
+		String catalogDir = CACHE_DIR + "catalog";
 		Path path = Paths.get(catalogDir);
 		
 		System.out.println("Checking if catalog exists...");
@@ -84,23 +87,79 @@ public class UrlCache {
      * @throws UrlCacheException if encounters any errors/exceptions
      */
 	public void getObject(String url) throws UrlCacheException {
-		Scanner inputStream;
+		BufferedReader inputStream;
 		PrintWriter outputStream;
+		String response, 
+			headerInfo = "", 
+			data = "",
+			command;
+		HttpHeader header;
+		
+		String standardizedUrl = getHostnameFromUrl(url) + getObjectPathFromUrl(url);
+		String host = getHostnameFromUrl(url);
+		String objectPath = getObjectPathFromUrl(url);
+		
+		//if we have the item, conditional get, else regular get
+		if(_Catalog.containsKey(standardizedUrl))
+		{
+			SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
+			Date dDate = new Date(_Catalog.get(standardizedUrl));
+			command = "GET " + objectPath + " HTTP/1.1 If-Modified-Since: " + format.format(dDate) + "\r\n";
+		}else
+		{
+			command = "GET " + objectPath + " HTTP/1.1\r\n";
+		}
 		
 		try
-		{
-			Socket socket = new Socket(url, DEFAULT_HTTP_PORT);
-			outputStream = new PrintWriter(new DataOutputStream(socket.getOutputStream()));
-			inputStream = new Scanner(new InputStreamReader(socket.getInputStream()));
+		{				
+			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
+			outputStream = new PrintWriter(socket.getOutputStream());
+			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			
-						
+			outputStream.print(command);
+			outputStream.print("Host: " + host + "\r\n");
+			outputStream.print("\r\n");
+			outputStream.flush();
+			
+			//reads until a blank line is found signifying the end of the header
+			response = inputStream.readLine();
+			while(response != null && response.compareTo("") != 0)
+			{
+				System.out.println(response);
+				headerInfo += response + "\r\n";
+				response = inputStream.readLine();
+			}
+			
+			header = new HttpHeader(headerInfo);
+			
+			//not at end of get request and GET request was good
+			if(response != null && header.get_Status() == 200)
+			{
+				response = inputStream.readLine();
+				while(response != null)
+				{
+					data += response;
+					response = inputStream.readLine();
+				}
+				
+				createDirectoryAndFile(objectPath, data);
+				_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
+			}
 			
 			inputStream.close();
 			outputStream.close();
+			socket.close();
 		}catch(Exception ex)
 		{
 			
 		}
+			
+		
+	}
+	
+	private void createDirectoryAndFile(String objectPath, String data)
+	{
+		
 	}
 	
     /**
@@ -114,18 +173,17 @@ public class UrlCache {
 		BufferedReader inputStream;
 		PrintWriter outputStream;
 		String response;
+		String headerInfo = "";
+		HttpHeader header;
 		
 		try
 		{
-			//InetAddress addr = InetAddress.getByName("people.ucalgary.ca/~mghaderi/index.html");
-			//System.out.println(addr.getHostAddress());
 			String host = getHostnameFromUrl(url);
 			String objectPath = getObjectPathFromUrl(url);
 			String command = "GET " + objectPath + " HTTP/1.1\r\n";
 			
-			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);  //explodes here, UnknownHostException
+			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
 			outputStream = new PrintWriter(socket.getOutputStream());
-			//ObjectInputStream objInStream = new ObjectInputStream(socket.getInputStream());
 			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			
 			outputStream.print(command);
@@ -133,12 +191,26 @@ public class UrlCache {
 			outputStream.print("\r\n");
 			outputStream.flush();
 			
-			while((response = inputStream.readLine()) != null)
+			//reads until a blank line is found signifying the end of the header
+			response = inputStream.readLine();
+			while(response != null && response.compareTo("") != 0)
+			{
 				System.out.println(response);
+				headerInfo += response + "\r\n";
+				response = inputStream.readLine();
+			}
+			
+			header = new HttpHeader(headerInfo);
 			
 			inputStream.close();
 			outputStream.close();
 			socket.close();
+			
+			//if lastModified is null, header text did not contain last modified date
+			if(header.get_LastModified() == null)
+				return 0;
+			else
+				return header.get_LastModifiedLong();
 		}catch(Exception ex)
 		{
 			System.out.println(ex.getMessage());
@@ -152,8 +224,7 @@ public class UrlCache {
 	 */
 	public void Close()
 	{
-		String catalogDir = System.getProperty("user.dir") + "\\cache\\";
-		Path path = Paths.get(catalogDir);
+		Path path = Paths.get(CACHE_DIR);
 		
 		if(!Files.exists(path))
 		{
@@ -166,7 +237,7 @@ public class UrlCache {
 		}
 		
 		try{
-			FileOutputStream fileOut = new FileOutputStream(catalogDir + "\\catalog");
+			FileOutputStream fileOut = new FileOutputStream(CACHE_DIR + "\\catalog");
 			ObjectOutputStream objOut = new ObjectOutputStream(fileOut);
 			
 			objOut.writeObject(_Catalog);
@@ -181,11 +252,16 @@ public class UrlCache {
 	
 	private String getHostnameFromUrl(String url)
 	{
-		return url.substring(0, url.indexOf("/") == -1 ? url.length() - 1 : url.indexOf("/"));
+		url = url.toLowerCase();
+		url = url.replace("https://", "").replace("http://", "");
+		url = url.substring(0, url.indexOf("/") == -1 ? url.length() - 1 : url.indexOf("/"));
+		return url;
 	}
 	
 	private String getObjectPathFromUrl(String url)
 	{
+		url = url.toLowerCase();
+		url = url.replace("https://", "").replace("http://", "");
 		return url.indexOf("/") == -1 ? "" : url.substring(url.indexOf("/"), url.length());
 	}
 }

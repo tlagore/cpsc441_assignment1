@@ -14,7 +14,8 @@ public class Tester {
 			UrlCache cache = new UrlCache();
 			
 			cache.getLastModified("people.ucalgary.ca/~mghaderi/index.html");
-			cache.getLastModified("www.cbc.ca/radio/podcasts/index.html");
+			//cache.getLastModified("people.ucalgary.ca/~mghaderi/test/uc.gif");
+			//cache.getLastModified("https://www.cbc.ca/radio/podcasts/index.html");
 			cache.Close();
 		}catch(UrlCacheException ex)
 		{
