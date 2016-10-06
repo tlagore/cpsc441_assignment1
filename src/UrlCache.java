@@ -1,5 +1,6 @@
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -15,6 +16,7 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Scanner;
 
 
@@ -43,6 +45,8 @@ public class UrlCache {
 		System.out.println("Checking if catalog exists...");
 		if(Files.exists(path))
 		{
+			//file exists, read in catalog
+			System.out.println("Catalog exists, reading in cache catalog.");
 			try{
 				FileInputStream fileIn = new FileInputStream(catalogDir);
 				ObjectInputStream objIn = new ObjectInputStream(fileIn);
@@ -51,6 +55,7 @@ public class UrlCache {
 				
 				objIn.close();
 				fileIn.close();
+				System.out.println("Catalog successfully read. Ready to proceed.");
 			}catch(FileNotFoundException ex)
 			{
 				//file not found, shouldn't happen, we just checked if it existed.
@@ -67,11 +72,6 @@ public class UrlCache {
 				System.out.println("Error reading catalog. Error:" + ex.getMessage() + ". Creating empty catalog.");
 				_Catalog = new HashMap<String, Long>();
 			}
-			
-			
-			//_Catalog = (HashMap<String, Long>)
-			//read in catalog
-			
 		}else
 		{
 			_Catalog = new HashMap<String, Long>();
@@ -94,19 +94,25 @@ public class UrlCache {
 			data = "",
 			command;
 		HttpHeader header;
+		Long lastModified;
 		
-		String standardizedUrl = getHostnameFromUrl(url) + getObjectPathFromUrl(url);
 		String host = getHostnameFromUrl(url);
 		String objectPath = getObjectPathFromUrl(url);
 		
+		String standardizedUrl = host + objectPath;
+		
+		
 		//if we have the item, conditional get, else regular get
-		if(_Catalog.containsKey(standardizedUrl))
+		
+		try{
+			lastModified = getLastModified(url);
+			SimpleDateFormat dateFormat = new SimpleDateFormat(
+			        "EEE, dd MMM yyyy HH:mm:ss z");
+			Date dDate = new Date(lastModified);
+			command = "GET " + objectPath + " HTTP/1.1 If-Modified-Since: " + dateFormat.format(dDate) + "\r\n";
+		}catch(UrlCacheException ex)
 		{
-			SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
-			Date dDate = new Date(_Catalog.get(standardizedUrl));
-			command = "GET " + objectPath + " HTTP/1.1 If-Modified-Since: " + format.format(dDate) + "\r\n";
-		}else
-		{
+			System.out.println(ex.getMessage());
 			command = "GET " + objectPath + " HTTP/1.1\r\n";
 		}
 		
@@ -142,7 +148,7 @@ public class UrlCache {
 					response = inputStream.readLine();
 				}
 				
-				createDirectoryAndFile(objectPath, data);
+				createDirectoryAndFile(standardizedUrl, data);
 				_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
 			}
 			
@@ -153,13 +159,33 @@ public class UrlCache {
 		{
 			
 		}
-			
-		
 	}
 	
-	private void createDirectoryAndFile(String objectPath, String data)
+	/**
+	 * 
+	 * @param urlPath the full object path of the item on the server
+	 * @param data the data of the file to write
+	 */
+	private void createDirectoryAndFile(String urlPath, String data)
 	{
-		
+		String dirPath = CACHE_DIR + urlPath.substring(0, urlPath.lastIndexOf("/"));
+		try{
+			File file = new File(dirPath);
+			file.mkdirs();
+			try{
+				PrintWriter fileOut = new PrintWriter(CACHE_DIR + urlPath);
+				
+				fileOut.print(data);
+				
+				fileOut.close();
+			}catch(IOException ex)
+			{
+				System.out.println("Error writing catalog to file.  Error:" + ex.getMessage() + ". Reopening this application will create new catalog.");
+			}
+		}catch(Exception ex)
+		{
+			System.out.println("Error creating file directory.  Error:" + ex.getMessage() + ". File not saved.");
+		}
 	}
 	
     /**
@@ -170,53 +196,58 @@ public class UrlCache {
      * @throws UrlCacheException if the specified url is not in the cache, or there are other errors/exceptions
      */
 	public long getLastModified(String url) throws UrlCacheException {
-		BufferedReader inputStream;
-		PrintWriter outputStream;
-		String response;
-		String headerInfo = "";
-		HttpHeader header;
-		
-		try
-		{
-			String host = getHostnameFromUrl(url);
-			String objectPath = getObjectPathFromUrl(url);
-			String command = "GET " + objectPath + " HTTP/1.1\r\n";
-			
-			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
-			outputStream = new PrintWriter(socket.getOutputStream());
-			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-			
-			outputStream.print(command);
-			outputStream.print("Host: " + host + "\r\n");
-			outputStream.print("\r\n");
-			outputStream.flush();
-			
-			//reads until a blank line is found signifying the end of the header
-			response = inputStream.readLine();
-			while(response != null && response.compareTo("") != 0)
-			{
-				System.out.println(response);
-				headerInfo += response + "\r\n";
-				response = inputStream.readLine();
-			}
-			
-			header = new HttpHeader(headerInfo);
-			
-			inputStream.close();
-			outputStream.close();
-			socket.close();
-			
-			//if lastModified is null, header text did not contain last modified date
-			if(header.get_LastModified() == null)
-				return 0;
-			else
-				return header.get_LastModifiedLong();
-		}catch(Exception ex)
-		{
-			System.out.println(ex.getMessage());
-		}
-		
-		return 0;
+		String standardizedUrl = getHostnameFromUrl(url) + getObjectPathFromUrl(url);
+		if(_Catalog.containsKey(standardizedUrl))
+			return _Catalog.get(standardizedUrl);
+		else
+			throw new UrlCacheException("URL not in cache.");
+//		BufferedReader inputStream;
+//		PrintWriter outputStream;
+//		String response;
+//		String headerInfo = "";
+//		HttpHeader header;
+//		
+//		try
+//		{
+//			String host = getHostnameFromUrl(url);
+//			String objectPath = getObjectPathFromUrl(url);
+//			String command = "GET " + objectPath + " HTTP/1.1\r\n";
+//			
+//			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
+//			outputStream = new PrintWriter(socket.getOutputStream());
+//			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+//			
+//			outputStream.print(command);
+//			outputStream.print("Host: " + host + "\r\n");
+//			outputStream.print("\r\n");
+//			outputStream.flush();
+//			
+//			//reads until a blank line is found signifying the end of the header
+//			response = inputStream.readLine();
+//			while(response != null && response.compareTo("") != 0)
+//			{
+//				System.out.println(response);
+//				headerInfo += response + "\r\n";
+//				response = inputStream.readLine();
+//			}
+//			
+//			header = new HttpHeader(headerInfo);
+//			
+//			inputStream.close();
+//			outputStream.close();
+//			socket.close();
+//			
+//			//if lastModified is null, header text did not contain last modified date
+//			if(header.get_LastModified() == null)
+//				return 0;
+//			else
+//				return header.get_LastModifiedLong();
+//		}catch(Exception ex)
+//		{
+//			System.out.println(ex.getMessage());
+//		}
+//		
+//		return 0;
 	}
 	
 	/**
