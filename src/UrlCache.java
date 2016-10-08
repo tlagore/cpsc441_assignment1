@@ -1,4 +1,6 @@
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -16,6 +18,8 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Scanner;
+import java.util.TimeZone;
 
 
 /**
@@ -29,6 +33,7 @@ public class UrlCache {
 	private HashMap<String, Long> _Catalog;
 	private final int DEFAULT_HTTP_PORT = 80;
 	private final String CACHE_DIR = System.getProperty("user.dir") + "\\cache\\";
+	private final TimeZone _SystemTimeZone = TimeZone.getDefault();
 		
     /**
      * Default constructor to initialize data structures used for caching/etc
@@ -90,12 +95,11 @@ public class UrlCache {
 		BufferedReader inputStream;
 		InputStream byteInputStream;
 		PrintWriter outputStream;
-		String response, 
-			headerInfo = "", 
-			data = "",
+		String headerInfo = "", 
 			command;
 		HttpHeader header;
 		Long lastModified;
+		int amountRead;
 		
 		String host = getHostnameFromUrl(url);
 		String objectPath = getObjectPathFromUrl(url);
@@ -108,7 +112,8 @@ public class UrlCache {
 		try{
 			lastModified = getLastModified(url);
 			SimpleDateFormat dateFormat = new SimpleDateFormat(
-			        "EEE, dd MMM yyyy HH:mm:ss z");
+			        "EEE, dd MMM yyyy HH:mm:ss zzz");
+			dateFormat.setTimeZone(_SystemTimeZone);
 			Date dDate = new Date(lastModified);
 			command = "GET " + objectPath + " HTTP/1.1 If-Modified-Since: " + dateFormat.format(dDate) + "\r\n";
 		}catch(UrlCacheException ex)
@@ -122,6 +127,7 @@ public class UrlCache {
 			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
 			outputStream = new PrintWriter(socket.getOutputStream());
 			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			byteInputStream = socket.getInputStream();
 		
 			//switch reading to this method
 			//socket.getInputStream().read(new byte[1500]);
@@ -131,35 +137,34 @@ public class UrlCache {
 			outputStream.print("\r\n");
 			outputStream.flush();
 			
-			//reads until a blank line is found signifying the end of the header
-			response = inputStream.readLine();
-			while(response != null && response.compareTo("") != 0)
-			{
-				System.out.println(response);
-				headerInfo += response + "\r\n";
-				response = inputStream.readLine();
-			}
+			amountRead = byteInputStream.read(input);
 			
-			header = new HttpHeader(headerInfo);
-			byteInputStream = socket.getInputStream();
-			
-			//not at end of get request and GET request was good
-			if(byteInputStream.available() > 0 && header.get_Status() == 200)
+			if(amountRead != -1 && amountRead != 0)
 			{
-				while(byteInputStream.available() > 0)
+				headerInfo = extractHeaderInfo(input);
+				
+				String str1 = new String(input);
+				System.out.println(str1);
+				
+				header = new HttpHeader(headerInfo, _SystemTimeZone);
+				if (header.get_Status() == 200)
 				{
-					byteInputStream.read(input);
-					
-//					data += response;
-//					response = inputStream.readLine();
+					File file = createDirectoryAndFile(standardizedUrl);
+					FileOutputStream fileOut = new FileOutputStream(file);
+					fileOut.write(input);
+					//read rest of data
+					amountRead = byteInputStream.read(input);
+					while(amountRead != -1)
+					{
+						
+						
+					}
+					fileOut.close();
+					_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
+				}else if (header.get_Status() == 304)
+				{
+					//same or newer file exists
 				}
-				//TODO move createDirectoryAndFile into above if statement before while loop
-				//TODO write data after each read from byteInputStream
-				createDirectoryAndFile(standardizedUrl, data);
-				_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
-			}else if (header.get_Status() == 304)
-			{
-				System.out.println("Same or newer file already exists in cache.");
 			}
 			
 			inputStream.close();
@@ -173,29 +178,67 @@ public class UrlCache {
 	
 	/**
 	 * 
-	 * @param urlPath the full object path of the item on the server
-	 * @param data the data of the file to write
+	 * @param data
+	 * @return returns the header information in string format
 	 */
-	private void createDirectoryAndFile(String urlPath, String data)
+	private String extractHeaderInfo(byte[] data)
 	{
-		String dirPath = CACHE_DIR + urlPath.substring(0, urlPath.lastIndexOf("/"));
-		try{
-			File file = new File(dirPath);
-			file.mkdirs();
-			try{
-				PrintWriter fileOut = new PrintWriter(CACHE_DIR + urlPath);
-				
-				fileOut.print(data);
-				
-				fileOut.close();
-			}catch(IOException ex)
+		String header = "";
+		String line;
+		InputStream inputStream = new ByteArrayInputStream(data);
+		BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+		int dataLength = data.length;
+		
+		try
+		{
+			line = reader.readLine();
+			while (line != null && !line.isEmpty())
 			{
-				System.out.println("Error writing catalog to file.  Error:" + ex.getMessage() + ". Reopening this application will create new catalog.");
+				header += line + "\r\n";
+				line  = reader.readLine();
 			}
+			
+			// add 2 to account for \r\n line that was not read in
+			int bytesInHeader = header.getBytes("UTF-8").length + 2;
+			
+			for (int i = 0; i < (dataLength - bytesInHeader); i++)
+			{
+				data[i] = data[i + bytesInHeader];
+			}
+			
+			for (int i = (dataLength - bytesInHeader); i < dataLength; i++)
+			{
+				data[i] = 0;
+			}
+		}catch(IOException ex)
+		{
+			
+		}
+		
+		
+		return header;
+	}
+	
+	/**
+	 * Takes the standardized url (url minus https:// or http://) and creates the file and directory for it
+	 * 
+	 * @param urlPath the full object path of the item on the server
+	 */
+	private File createDirectoryAndFile(String urlPath)
+	{
+		String dirPath = CACHE_DIR + urlPath;
+		File file = null;
+		try{
+			file = new File(dirPath);
+			file.delete();
+			file.getParentFile().mkdirs();
+			file.createNewFile();
 		}catch(Exception ex)
 		{
 			System.out.println("Error creating file directory.  Error:" + ex.getMessage() + ". File not saved.");
 		}
+		
+		return file;
 	}
 	
     /**

@@ -1,6 +1,7 @@
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.TimeZone;
 
 public class HttpHeader {
 	private Integer _Status;
@@ -14,7 +15,7 @@ public class HttpHeader {
 		_LastModified = null;
 	}
 	
-	public HttpHeader(String headerText)
+	public HttpHeader(String headerText, TimeZone timeZone)
 	{
 		//set all to null, if any information is missing from header, value will be null
 		_Status = null;
@@ -36,6 +37,7 @@ public class HttpHeader {
 			{
 				try{
 					SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
+					format.setTimeZone(timeZone);
 					_LastModified = format.parse(lines[i].replace("Last-Modified: ", ""));
 				}catch(ParseException ex)
 				{
