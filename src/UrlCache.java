@@ -92,46 +92,26 @@ public class UrlCache {
      */
 	public void getObject(String url) throws UrlCacheException {
 		byte[] input = new byte[10*1024];
-		BufferedReader inputStream;
 		InputStream byteInputStream;
 		PrintWriter outputStream;
 		String headerInfo = "", 
 			command;
 		HttpHeader header;
-		Long lastModified;
 		int amountRead;
 		
 		String host = getHostnameFromUrl(url);
 		String objectPath = getObjectPathFromUrl(url);
 		
 		String standardizedUrl = host + objectPath;
-		
-		
-		//if we have the item, conditional get, else regular get
-		
-		try{
-			lastModified = getLastModified(url);
-			SimpleDateFormat dateFormat = new SimpleDateFormat(
-			        "EEE, dd MMM yyyy HH:mm:ss zzz");
-			dateFormat.setTimeZone(_SystemTimeZone);
-			Date dDate = new Date(lastModified);
-			command = "GET " + objectPath + " HTTP/1.1 If-Modified-Since: " + dateFormat.format(dDate) + "\r\n";
-		}catch(UrlCacheException ex)
-		{
-			System.out.println(ex.getMessage());
-			command = "GET " + objectPath + " HTTP/1.1\r\n";
-		}
+			
+		command = getHttpGetCommand(url);
 		
 		try
 		{				
 			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
 			outputStream = new PrintWriter(socket.getOutputStream());
-			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			byteInputStream = socket.getInputStream();
-		
-			//switch reading to this method
-			//socket.getInputStream().read(new byte[1500]);
-			
+
 			outputStream.print(command);
 			outputStream.print("Host: " + host + "\r\n");
 			outputStream.print("\r\n");
@@ -165,9 +145,11 @@ public class UrlCache {
 				{
 					//same or newer file exists
 				}
+			}else
+			{
+				System.out.println("No data read from response.");
 			}
-			
-			inputStream.close();
+		
 			outputStream.close();
 			socket.close();
 		}catch(Exception ex)
@@ -175,6 +157,34 @@ public class UrlCache {
 			
 		}
 	}
+
+	/**
+	 * 
+	 * 
+	 * @param url 
+	 * @param objectPath
+	 * @return
+	 */
+	private String getHttpGetCommand(String url) {
+		String command;
+		Long lastModified;
+		
+		//if we have the item cached, conditional get, else regular 
+		try{
+			lastModified = getLastModified(url);
+			SimpleDateFormat dateFormat = new SimpleDateFormat(
+			        "EEE, dd MMM yyyy HH:mm:ss zzz");
+			dateFormat.setTimeZone(_SystemTimeZone);
+			Date dDate = new Date(lastModified);
+			command = "GET " + getObjectPathFromUrl(url) + " HTTP/1.1 If-Modified-Since: " + dateFormat.format(dDate) + "\r\n";
+		}catch(UrlCacheException ex)
+		{
+			System.out.println(ex.getMessage());
+			command = "GET " + getObjectPathFromUrl(url) + " HTTP/1.1\r\n";
+		}
+		return command;
+	}
+	
 	
 	/**
 	 * 
@@ -254,53 +264,6 @@ public class UrlCache {
 			return _Catalog.get(standardizedUrl);
 		else
 			throw new UrlCacheException("URL not in cache.");
-//		BufferedReader inputStream;
-//		PrintWriter outputStream;
-//		String response;
-//		String headerInfo = "";
-//		HttpHeader header;
-//		
-//		try
-//		{
-//			String host = getHostnameFromUrl(url);
-//			String objectPath = getObjectPathFromUrl(url);
-//			String command = "GET " + objectPath + " HTTP/1.1\r\n";
-//			
-//			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
-//			outputStream = new PrintWriter(socket.getOutputStream());
-//			inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-//			
-//			outputStream.print(command);
-//			outputStream.print("Host: " + host + "\r\n");
-//			outputStream.print("\r\n");
-//			outputStream.flush();
-//			
-//			//reads until a blank line is found signifying the end of the header
-//			response = inputStream.readLine();
-//			while(response != null && response.compareTo("") != 0)
-//			{
-//				System.out.println(response);
-//				headerInfo += response + "\r\n";
-//				response = inputStream.readLine();
-//			}
-//			
-//			header = new HttpHeader(headerInfo);
-//			
-//			inputStream.close();
-//			outputStream.close();
-//			socket.close();
-//			
-//			//if lastModified is null, header text did not contain last modified date
-//			if(header.get_LastModified() == null)
-//				return 0;
-//			else
-//				return header.get_LastModifiedLong();
-//		}catch(Exception ex)
-//		{
-//			System.out.println(ex.getMessage());
-//		}
-//		
-//		return 0;
 	}
 	
 	/**
