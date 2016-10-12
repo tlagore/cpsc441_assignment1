@@ -92,15 +92,14 @@ public class UrlCache {
      */
 	public void getObject(String url) throws UrlCacheException {
 		byte[] input = new byte[10*1024];
-		InputStream byteInputStream;
+		InputStream inputStream;
 		PrintWriter outputStream;
 		String headerInfo = "", 
-			command;
+			command,
+			host = getHostnameFromUrl(url),
+			objectPath = getObjectPathFromUrl(url);
 		HttpHeader header;
 		int amountRead;
-		
-		String host = getHostnameFromUrl(url);
-		String objectPath = getObjectPathFromUrl(url);
 		
 		String standardizedUrl = host + objectPath;
 			
@@ -110,14 +109,14 @@ public class UrlCache {
 		{				
 			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
 			outputStream = new PrintWriter(socket.getOutputStream());
-			byteInputStream = socket.getInputStream();
+			inputStream = socket.getInputStream();
 
 			outputStream.print(command);
 			outputStream.print("Host: " + host + "\r\n");
 			outputStream.print("\r\n");
 			outputStream.flush();
 			
-			amountRead = byteInputStream.read(input);
+			amountRead = inputStream.read(input);
 			
 			if(amountRead != -1 && amountRead != 0)
 			{
@@ -132,18 +131,22 @@ public class UrlCache {
 					File file = createDirectoryAndFile(standardizedUrl);
 					FileOutputStream fileOut = new FileOutputStream(file);
 					fileOut.write(input);
+					
 					//read rest of data
-					amountRead = byteInputStream.read(input);
+					amountRead = inputStream.read(input);
 					while(amountRead != -1)
 					{
-						
-						
+												
 					}
 					fileOut.close();
 					_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
 				}else if (header.get_Status() == 304)
 				{
 					//same or newer file exists
+				}else
+				{
+					//some other code
+					System.out.println("Error. Http status code: " + header.get_Status() + ".");
 				}
 			}else
 			{
