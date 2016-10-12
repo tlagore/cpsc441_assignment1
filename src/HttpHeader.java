@@ -1,12 +1,13 @@
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
 
 public class HttpHeader {
 	private Integer _Status;
 	private String _FileType;
-	private Date _LastModified;
+	private Calendar _LastModified;
 	
 	public HttpHeader()
 	{
@@ -20,7 +21,7 @@ public class HttpHeader {
 		//set all to null, if any information is missing from header, value will be null
 		_Status = null;
 		_FileType = null;
-		_LastModified = null;
+		_LastModified = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
 		
 		String[] lines = headerText.split(System.getProperty("line.separator"));
 		for(int i = 0; i < lines.length; i++)
@@ -36,9 +37,11 @@ public class HttpHeader {
 			if(lines[i].contains("Last-Modified"))
 			{
 				try{
-					SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
-					format.setTimeZone(timeZone);
-					_LastModified = format.parse(lines[i].replace("Last-Modified: ", ""));
+					SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss");
+					format.setTimeZone(TimeZone.getTimeZone("GMT"));
+					String dateModified = lines[i].replaceAll("Last-Modified: ", "");
+					_LastModified.setTime(format.parse(dateModified));
+					//_LastModified.getTime()
 				}catch(ParseException ex)
 				{
 					//bad date format
@@ -47,7 +50,7 @@ public class HttpHeader {
 		}
 	}
 	
-	public HttpHeader(Integer status, String fileType, Date lastModified)
+	public HttpHeader(Integer status, String fileType, Calendar lastModified)
 	{
 		_Status = status;
 		_FileType = fileType;
@@ -70,15 +73,15 @@ public class HttpHeader {
 		this._FileType = _FileType;
 	}
 
-	public Date get_LastModified() {
+	public Calendar get_LastModified() {
 		return _LastModified;
 	}
 	
 	public long get_LastModifiedLong(){
-		return _LastModified.getTime();
+		return _LastModified.getTimeInMillis();
 	}
 
-	public void set_LastModified(Date _LastModified) {
+	public void set_LastModified(Calendar _LastModified) {
 		this._LastModified = _LastModified;
 	}
 

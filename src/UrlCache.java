@@ -1,4 +1,3 @@
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -15,10 +14,11 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Scanner;
 import java.util.TimeZone;
 
 
@@ -92,6 +92,7 @@ public class UrlCache {
      */
 	public void getObject(String url) throws UrlCacheException {
 		byte[] input = new byte[10*1024];
+		Socket socket;
 		InputStream inputStream;
 		PrintWriter outputStream;
 		String headerInfo = "", 
@@ -100,14 +101,14 @@ public class UrlCache {
 			objectPath = getObjectPathFromUrl(url);
 		HttpHeader header;
 		int amountRead;
-		
+		host = host.indexOf(":") == -1 ? host : host.substring(0, host.indexOf(":"));
 		String standardizedUrl = host + objectPath;
 			
 		command = getHttpGetCommand(url);
 		
 		try
 		{				
-			Socket socket = new Socket(host, DEFAULT_HTTP_PORT);
+			socket = getSocket(url);
 			outputStream = new PrintWriter(socket.getOutputStream());
 			inputStream = socket.getInputStream();
 
@@ -129,20 +130,20 @@ public class UrlCache {
 				if (header.get_Status() == 200)
 				{
 					File file = createDirectoryAndFile(standardizedUrl);
-					FileOutputStream fileOut = new FileOutputStream(file);
+					FileOutputStream fileOut = new FileOutputStream(file, true);
 					fileOut.write(input);
 					
 					//read rest of data
-					amountRead = inputStream.read(input);
-					while(amountRead != -1)
+					while((amountRead = inputStream.read(input)) != -1)
 					{
-												
+						fileOut.write(input);
 					}
+					
 					fileOut.close();
 					_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
 				}else if (header.get_Status() == 304)
 				{
-					//same or newer file exists
+					System.out.println("Http: " + header.get_Status() + ". Same or newer file stored in cache.");
 				}else
 				{
 					//some other code
@@ -157,8 +158,34 @@ public class UrlCache {
 			socket.close();
 		}catch(Exception ex)
 		{
-			
+			System.out.println("Error: " + ex.getMessage());
+			ex.printStackTrace();
 		}
+	}
+	
+	private Socket getSocket(String url) throws IOException
+	{
+		Socket socket = null;
+		String host = getHostnameFromUrl(url);
+		int indexOfColon = host.indexOf(":");
+		int port;
+		
+		try{
+			port = Integer.parseInt(indexOfColon == -1 ? "" : host.substring(indexOfColon));
+		}catch(Exception ex)
+		{
+			port = -1;
+		}
+		host = indexOfColon == -1 ? host : host.substring(0, indexOfColon);
+			
+		try{
+			socket = new Socket(host, port == -1 ? DEFAULT_HTTP_PORT : port);
+		}catch(IOException ex)
+		{
+			throw ex;
+		}
+		
+		return socket;
 	}
 
 	/**
@@ -174,12 +201,13 @@ public class UrlCache {
 		
 		//if we have the item cached, conditional get, else regular 
 		try{
+			//add 1 second
 			lastModified = getLastModified(url);
 			SimpleDateFormat dateFormat = new SimpleDateFormat(
 			        "EEE, dd MMM yyyy HH:mm:ss zzz");
-			dateFormat.setTimeZone(_SystemTimeZone);
+			dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
 			Date dDate = new Date(lastModified);
-			command = "GET " + getObjectPathFromUrl(url) + " HTTP/1.1 If-Modified-Since: " + dateFormat.format(dDate) + "\r\n";
+			command = "GET " + getObjectPathFromUrl(url) + " HTTP/1.1\r\nIf-Modified-Since: " + dateFormat.format(dDate) + "\r\n";
 		}catch(UrlCacheException ex)
 		{
 			System.out.println(ex.getMessage());
