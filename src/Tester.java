@@ -1,5 +1,3 @@
-import java.util.TimeZone;
-
 /**
  * A simple test driver
  * 
@@ -43,8 +41,6 @@ public class Tester {
 			System.out.println("Last-Modified for " + url[0] + " is: " + cache.getLastModified(url[0]));
 			cache.getObject(url[0]);
 			System.out.println("Last-Modified for " + url[0] + " is: " + cache.getLastModified(url[0]));
-			
-			cache.Close();
 		}
 		catch (UrlCacheException e) {
 			System.out.println("There was a problem: " + e.getMessage());

@@ -14,9 +14,7 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.TimeZone;
@@ -25,7 +23,7 @@ import java.util.TimeZone;
 /**
  * UrlCache Class
  * 
- * @author 	Majid Ghaderi, Tyrone Lagore
+ * @author 	Tyrone Lagore
  * @version	1.2, October 5, 2016
  *
  */
@@ -104,6 +102,7 @@ public class UrlCache {
 		host = host.indexOf(":") == -1 ? host : host.substring(0, host.indexOf(":"));
 		String standardizedUrl = host + objectPath;
 			
+		//get GET or conditional GET command
 		command = getHttpGetCommand(url);
 		
 		try
@@ -112,6 +111,7 @@ public class UrlCache {
 			outputStream = new PrintWriter(socket.getOutputStream());
 			inputStream = socket.getInputStream();
 
+			//write command to socket outputstream
 			outputStream.print(command);
 			outputStream.print("Host: " + host + "\r\n");
 			outputStream.print("\r\n");
@@ -119,21 +119,20 @@ public class UrlCache {
 			
 			amountRead = inputStream.read(input);
 			
+			//if amountRead is not -1 or 0, there is a response
 			if(amountRead != -1 && amountRead != 0)
 			{
 				headerInfo = extractHeaderInfo(input);
 				
-				String str1 = new String(input);
-				System.out.println(str1);
-				
-				header = new HttpHeader(headerInfo, _SystemTimeZone);
+				//get necessary header info
+				header = new HttpHeader(headerInfo);
 				if (header.get_Status() == 200)
 				{
 					File file = createDirectoryAndFile(standardizedUrl);
 					FileOutputStream fileOut = new FileOutputStream(file, true);
 					fileOut.write(input);
 					
-					//read rest of data
+					//read/write rest of data to file
 					while((amountRead = inputStream.read(input)) != -1)
 					{
 						fileOut.write(input);
@@ -141,12 +140,13 @@ public class UrlCache {
 					
 					fileOut.close();
 					_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
+					writeCatalog();
 				}else if (header.get_Status() == 304)
 				{
 					System.out.println("Http: " + header.get_Status() + ". Same or newer file stored in cache.");
 				}else
 				{
-					//some other code
+					//some other Http code
 					System.out.println("Error. Http status code: " + header.get_Status() + ".");
 				}
 			}else
@@ -163,6 +163,16 @@ public class UrlCache {
 		}
 	}
 	
+	/**
+	 * 
+	 * Receives the unmodified url in the form host:port/location/of/file and opens a socket
+	 * to the specified host on the specified port.  If no port is specified, a default port of 80 is 
+	 * used.
+	 * 
+	 * @param url the unmodified url of the request
+	 * @return the created Socket if successful
+	 * @throws IOException If the socket cannot be created due to a malformed url or bad connection, an exception will be thrown.
+	 */
 	private Socket getSocket(String url) throws IOException
 	{
 		Socket socket = null;
@@ -170,14 +180,17 @@ public class UrlCache {
 		int indexOfColon = host.indexOf(":");
 		int port;
 		
+		//tries to parse the port number from the url, otherwise sets it to -1
 		try{
 			port = Integer.parseInt(indexOfColon == -1 ? "" : host.substring(indexOfColon));
 		}catch(Exception ex)
 		{
 			port = -1;
 		}
+		
 		host = indexOfColon == -1 ? host : host.substring(0, indexOfColon);
 			
+		//if port = -1, then no port was specified or was in bad format. Default port is used.
 		try{
 			socket = new Socket(host, port == -1 ? DEFAULT_HTTP_PORT : port);
 		}catch(IOException ex)
@@ -189,11 +202,12 @@ public class UrlCache {
 	}
 
 	/**
+	 * Receives a URL and checks if it exists in the cache.  If it does, it returns
+	 * a GET command with an if-modified-since conditional.  If it does not exist, a regular
+	 * GET command is returned.
 	 * 
-	 * 
-	 * @param url 
-	 * @param objectPath
-	 * @return
+	 * @param url The url of the get command in question
+	 * @return a regular GET command if the object is not in cache, or a GET if-modified-since if it is present
 	 */
 	private String getHttpGetCommand(String url) {
 		String command;
@@ -201,8 +215,9 @@ public class UrlCache {
 		
 		//if we have the item cached, conditional get, else regular 
 		try{
-			//add 1 second
 			lastModified = getLastModified(url);
+			
+			//Format properly date properly for command
 			SimpleDateFormat dateFormat = new SimpleDateFormat(
 			        "EEE, dd MMM yyyy HH:mm:ss zzz");
 			dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -218,8 +233,13 @@ public class UrlCache {
 	
 	
 	/**
+	 * extractHeaderInfo takes in an HTTP get response in a byte array format and
+	 * extracts the header information.
 	 * 
-	 * @param data
+	 * It is assumed that the response is in correct format (Ie, header at the beginning of the byte
+	 * array, ended by the presence of a blank line)
+	 * 
+	 * @param data The http get response in byte format
 	 * @return returns the header information in string format
 	 */
 	private String extractHeaderInfo(byte[] data)
@@ -253,7 +273,7 @@ public class UrlCache {
 			}
 		}catch(IOException ex)
 		{
-			
+			System.out.println("Error: " + ex.getMessage());
 		}
 		
 		
@@ -264,6 +284,7 @@ public class UrlCache {
 	 * Takes the standardized url (url minus https:// or http://) and creates the file and directory for it
 	 * 
 	 * @param urlPath the full object path of the item on the server
+	 * @return returns the File that was created for the url
 	 */
 	private File createDirectoryAndFile(String urlPath)
 	{
@@ -298,9 +319,9 @@ public class UrlCache {
 	}
 	
 	/**
-	 * Close the class, writing the hashmap to file
+	 * Writes the current contents of the catalog to file using ObjectOutputStream.
 	 */
-	public void Close()
+	public void writeCatalog()
 	{
 		Path path = Paths.get(CACHE_DIR);
 		
@@ -328,6 +349,12 @@ public class UrlCache {
 		}
 	}
 	
+	/**
+	 * Given a full url, it returns the host name attached with the port number
+	 * 
+	 * @param url A url from which the host must be derived
+	 * @return host name of the url with attached port number in the form host:port
+	 */
 	private String getHostnameFromUrl(String url)
 	{
 		url = url.toLowerCase();
@@ -336,6 +363,12 @@ public class UrlCache {
 		return url;
 	}
 	
+	/**
+	 * Given a full url, it returns the object path of the url
+	 * 
+	 * @param url a url from which the object path must be derived
+	 * @return the object path of the url in the form /location/to/object.obj
+	 */
 	private String getObjectPathFromUrl(String url)
 	{
 		url = url.toLowerCase();
