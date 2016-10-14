@@ -85,7 +85,7 @@ public class UrlCache {
     /**
      * Downloads the object specified by the parameter url if the local copy is out of date.
 	 *
-     * @param url	URL of the object to be downloaded. It is a fully qualified URL.
+     * @param url URL of the object to be downloaded. It is a fully qualified URL.
      * @throws UrlCacheException if encounters any errors/exceptions
      */
 	public void getObject(String url) throws UrlCacheException {
@@ -359,7 +359,7 @@ public class UrlCache {
 	{
 		url = url.toLowerCase();
 		url = url.replace("https://", "").replace("http://", "");
-		url = url.substring(0, url.indexOf("/") == -1 ? url.length() - 1 : url.indexOf("/"));
+		url = url.substring(0, url.indexOf("/") == -1 ? url.length() : url.indexOf("/"));
 		return url;
 	}
 	
