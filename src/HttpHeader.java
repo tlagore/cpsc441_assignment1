@@ -3,6 +3,13 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.TimeZone;
 
+/**
+ * Class HttpHeader
+ * 
+ * Handles the http header information returned from an Http request
+ * @author Tyrone
+ *
+ */
 public class HttpHeader {
 	private Integer _Status;
 	private String _FileType;
@@ -61,9 +68,9 @@ public class HttpHeader {
 	
 	/**
 	 * Alternate constructor if information is known
-	 * @param status
-	 * @param fileType
-	 * @param lastModified
+	 * @param status status of the http request
+	 * @param fileType filetype of the http request
+	 * @param lastModified when the file was last modified (if relevant)
 	 */
 	public HttpHeader(Integer status, String fileType, Calendar lastModified)
 	{
@@ -72,35 +79,38 @@ public class HttpHeader {
 		_LastModified = lastModified;
 	}
 	
+	/**	
+	 * For the purposes of this simple client
+	 * 200 OK
+	 * 304 Not Modified
+	 * 400 Bad Request
+	 * 404 Not Found
+	 * 
+	 * @return the status code of the http get request
+	 */
 	public Integer get_Status() {
 		return _Status;
 	}
-
-	public void set_Status(Integer _Status) {
-		this._Status = _Status;
-	}
-
+	
+	/**	
+	 * @return the file type of the get request, example: text/html
+	 */
 	public String get_FileType() {
 		return _FileType;
 	}
 
-	public void set_FileType(String _FileType) {
-		this._FileType = _FileType;
-	}
 
+	/**	
+	 * @return gets the Calendar format of the date
+	 */
 	public Calendar get_LastModified() {
 		return _LastModified;
 	}
 	
 	/**
-	 * @return returns 0 if _LastModified has not been set
+	 * @return returns 0 if _LastModified has not been set otherwise time in milliseconds
 	 */
 	public long get_LastModifiedLong(){
 		return _LastModified == null ? 0 : _LastModified.getTimeInMillis();
 	}
-
-	public void set_LastModified(Calendar _LastModified) {
-		this._LastModified = _LastModified;
-	}
-
 }

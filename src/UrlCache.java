@@ -23,6 +23,10 @@ import java.util.TimeZone;
 /**
  * UrlCache Class
  * 
+ * A simple HTTP client that handles get requests.  Caches and logs downloaded files and their modification date.
+ * 
+ * If the file has not been modified since it's last get date, it will not download.
+ * 
  * @author 	Tyrone Lagore
  * @version	1.2, October 5, 2016
  *
@@ -31,7 +35,6 @@ public class UrlCache {
 	private HashMap<String, Long> _Catalog;
 	private final int DEFAULT_HTTP_PORT = 80;
 	private final String CACHE_DIR = System.getProperty("user.dir") + "\\cache\\";
-	private final TimeZone _SystemTimeZone = TimeZone.getDefault();
 		
     /**
      * Default constructor to initialize data structures used for caching/etc
@@ -126,29 +129,33 @@ public class UrlCache {
 				
 				//get necessary header info
 				header = new HttpHeader(headerInfo);
-				if (header.get_Status() == 200)
+				if (objectPath != "")
 				{
-					File file = createDirectoryAndFile(standardizedUrl);
-					FileOutputStream fileOut = new FileOutputStream(file, true);
-					fileOut.write(input);
-					
-					//read/write rest of data to file
-					while((amountRead = inputStream.read(input)) != -1)
+					if (header.get_Status() == 200)
 					{
+						File file = createDirectoryAndFile(standardizedUrl);
+						FileOutputStream fileOut = new FileOutputStream(file, true);
 						fileOut.write(input);
+						
+						//read/write rest of data to file
+						while((amountRead = inputStream.read(input)) != -1)
+						{
+							fileOut.write(input);
+						}
+						
+						fileOut.close();
+						_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
+						writeCatalog();
+					}else if (header.get_Status() == 304)
+					{
+						System.out.println("Http: " + header.get_Status() + ". Same or newer file stored in cache.");
+					}else
+					{
+						//some other Http code
+						System.out.println("Error. Http status code: " + header.get_Status() + ".");
 					}
-					
-					fileOut.close();
-					_Catalog.put(standardizedUrl, header.get_LastModifiedLong());
-					writeCatalog();
-				}else if (header.get_Status() == 304)
-				{
-					System.out.println("Http: " + header.get_Status() + ". Same or newer file stored in cache.");
 				}else
-				{
-					//some other Http code
-					System.out.println("Error. Http status code: " + header.get_Status() + ".");
-				}
+					System.out.println("No object path specified in url.");
 			}else
 			{
 				System.out.println("No data read from response.");
