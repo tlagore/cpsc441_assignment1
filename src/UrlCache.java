@@ -135,12 +135,14 @@ public class UrlCache {
 					{
 						File file = createDirectoryAndFile(standardizedUrl);
 						FileOutputStream fileOut = new FileOutputStream(file, true);
-						fileOut.write(input);
+						PrintWriter out = new PrintWriter(fileOut, true);
+						
+						fileOut.write(input, 0, amountRead);
 						
 						//read/write rest of data to file
 						while((amountRead = inputStream.read(input)) != -1)
 						{
-							fileOut.write(input);
+							fileOut.write(input, 0, amountRead);
 						}
 						
 						fileOut.close();
@@ -168,6 +170,14 @@ public class UrlCache {
 			System.out.println("Error: " + ex.getMessage());
 			ex.printStackTrace();
 		}
+	}
+	
+	private String toBinary( byte[] bytes )
+	{
+	    StringBuilder sb = new StringBuilder(bytes.length * Byte.SIZE);
+	    for( int i = 0; i < Byte.SIZE * bytes.length; i++ )
+	        sb.append((bytes[i / Byte.SIZE] << i % Byte.SIZE & 0x80) == 0 ? '0' : '1');
+	    return sb.toString();
 	}
 	
 	/**
