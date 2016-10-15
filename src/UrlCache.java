@@ -18,6 +18,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -126,6 +127,10 @@ public class UrlCache {
 			if(amountRead != -1 && amountRead != 0)
 			{
 				headerInfo = extractHeaderInfo(input);
+				
+				//subtract the header amount from amount read
+				int bytesInHeader = headerInfo.getBytes("UTF-8").length + 2;
+				amountRead -= bytesInHeader;
 				
 				//get necessary header info
 				header = new HttpHeader(headerInfo);
@@ -278,12 +283,13 @@ public class UrlCache {
 			
 			// add 2 to account for \r\n line that was not read in
 			int bytesInHeader = header.getBytes("UTF-8").length + 2;
-			
+
+			//shiftArrayData(data, bytesInHeader);
 			for (int i = 0; i < (dataLength - bytesInHeader); i++)
 			{
 				data[i] = data[i + bytesInHeader];
 			}
-			
+
 			for (int i = (dataLength - bytesInHeader); i < dataLength; i++)
 			{
 				data[i] = 0;
@@ -296,6 +302,7 @@ public class UrlCache {
 		
 		return header;
 	}
+	
 	
 	/**
 	 * Takes the standardized url (url minus https:// or http://) and creates the file and directory for it
